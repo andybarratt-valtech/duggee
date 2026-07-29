@@ -113,13 +113,31 @@
 <body>
 <div class="wrap">
   <h1>🐶 Which Duggee Episode?</h1>
-  <p class="sub">Type badge name...</p>
+  <p class="sub">Search for an episode</p>
   <div class="search-box">
     <input type="text" id="q" placeholder="e.g. space, midnight, cheese..." autocomplete="off" autofocus>
   </div>
   <div id="results" class="results" style="display:none;"></div>
   <div id="picked" style="display:none;"></div>
   <div id="emptyNote" class="empty-note" style="display:none;">No match. Try a different word from the title, or check spelling.</div>
+
+  <div id="shakeSection" style="text-align:center; margin-top:22px;">
+    <button id="shakeBtn" type="button" style="
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+    ">🎲 Pick a random episode</button>
+    <p style="color: var(--muted); font-size: 0.8rem; margin-top: 8px;">
+      Or just shake the phone.
+    </p>
+  </div>
+  <div id="randomPicked" style="display:none;"></div>
+
   <div class="count" id="count"></div>
 </div>
 
@@ -273,6 +291,72 @@ function pick(ep) {
 }
 
 input.addEventListener('input', render);
+
+// ---- Random episode (button + shake) ----
+const shakeBtn = document.getElementById('shakeBtn');
+const randomPickedEl = document.getElementById('randomPicked');
+
+function showRandomEpisode() {
+  // exclude the pilot (index 0) from random picks, it's an outlier
+  const pool = episodes.filter(ep => ep[0] !== 0);
+  const ep = pool[Math.floor(Math.random() * pool.length)];
+
+  // clear the search UI so it doesn't look like two answers are shown at once
+  input.value = '';
+  resultsEl.style.display = 'none';
+  pickedEl.style.display = 'none';
+  emptyEl.style.display = 'none';
+
+  randomPickedEl.style.display = 'block';
+  randomPickedEl.className = 'picked';
+  randomPickedEl.innerHTML = `
+    <div class="big">🎲 ${ep[3]}</div>
+    <div class="details">Series ${ep[0]}, Episode ${ep[1]} &middot; overall episode #${ep[2]}</div>
+  `;
+}
+
+shakeBtn.addEventListener('click', showRandomEpisode);
+
+// Shake detection via devicemotion
+let lastShakeTime = 0;
+const SHAKE_THRESHOLD = 18; // total acceleration delta to count as a shake
+let lastX = null, lastY = null, lastZ = null;
+
+function handleMotion(event) {
+  const acc = event.accelerationIncludingGravity;
+  if (!acc || acc.x === null) return;
+  const { x, y, z } = acc;
+  if (lastX !== null) {
+    const delta = Math.abs(x - lastX) + Math.abs(y - lastY) + Math.abs(z - lastZ);
+    const now = Date.now();
+    if (delta > SHAKE_THRESHOLD && now - lastShakeTime > 1200) {
+      lastShakeTime = now;
+      showRandomEpisode();
+    }
+  }
+  lastX = x; lastY = y; lastZ = z;
+}
+
+function enableShakeListening() {
+  window.addEventListener('devicemotion', handleMotion);
+}
+
+// iOS 13+ requires an explicit permission request triggered by a user gesture.
+// We attach it to the same button tap, so one tap both picks a random episode
+// AND (on iOS) unlocks shake detection for next time.
+if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+  shakeBtn.addEventListener('click', function requestMotionOnce() {
+    DeviceMotionEvent.requestPermission()
+      .then(state => {
+        if (state === 'granted') enableShakeListening();
+      })
+      .catch(() => { /* permission denied or unsupported; button still works */ });
+    shakeBtn.removeEventListener('click', requestMotionOnce);
+  }, { once: true });
+} else if (typeof DeviceMotionEvent !== 'undefined') {
+  // Android / non-iOS-13+ browsers: no permission gate needed
+  enableShakeListening();
+}
 </script>
 </body>
 </html>
